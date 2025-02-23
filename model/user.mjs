@@ -16,6 +16,16 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  latitude: {
+    type: String,
+    required: true,
+    unique: true,
+  },
+  longitude: {
+    type: String,
+    required: true,
+    unique: true,
+  },
   // role: {
   //   type: String,
   //   required: true,
