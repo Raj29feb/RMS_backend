@@ -125,18 +125,19 @@ app.post("/add-restaurant", validateJWT, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
-app.get("/restaurants/:owner", validateJWT, async (req, res) => {
+app.get("/restaurants", validateJWT, async (req, res) => {
   try {
+    const { owner } = req.query;
     let data;
-    if (!req.params.owner) {
+    if (!owner) {
       return res.status(400).json({ message: "Owner is required" });
-    } else if (req.params.owner === "all") {
+    } else if (owner === "all") {
       data = await restaurant.find();
-    } else if (req.params.owner === "self") {
+    } else if (owner === "self") {
       data = await restaurant.find({ userId: req.user });
       console.log("data::", data);
     } else {
-      data = await restaurant.find({ owner: req.params.owner });
+      data = await restaurant.find({ owner });
     }
     if (!data.length > 0) {
       return res.status(404).json({ message: "No restaurant found" });
@@ -227,12 +228,13 @@ app.post("/add-dishes", validateJWT, async (req, res) => {
   }
 });
 
-app.get("/restaurant-names/:filter", validateJWT, async (req, res) => {
+app.get("/restaurant-names", validateJWT, async (req, res) => {
   try {
+    const { filter } = req.query;
     let data;
-    if (req.params.filter === "specific") {
+    if (filter === "specific") {
       data = await restaurant.find({ userId: req.user }, { restaurantName: 1 });
-    } else if (req.params.filter === "all") {
+    } else if (filter === "all") {
       data = await restaurant.find({}, { restaurantName: 1 });
     } else {
       return res
@@ -297,18 +299,19 @@ app.get("/distances", validateJWT, async (req, res) => {
     return res.status(500).json({ message: error.message });
   }
 });
-app.get("/dishes/:restaurantId", validateJWT, async (req, res) => {
+app.get("/dishes", validateJWT, async (req, res) => {
   try {
+    const { data } = req.query;
     let foundDishes = [];
-    if (!req.params.restaurantId) {
+    if (!data) {
       return res.status(400).json({ message: "Restaurant Id is required" });
-    } else if (req.params.restaurantId === "all") {
+    } else if (data === "all") {
       foundDishes = await dish.find();
-    } else if (req.params.restaurantId === "self") {
+    } else if (data === "self") {
       foundDishes = await dish.find({ userId: req.user });
     } else {
       foundDishes = await dish.find({
-        restaurantId: req.params.restaurantId,
+        restaurantId: data,
       });
     }
     if (!foundDishes.length > 0) {
