@@ -27,6 +27,7 @@ const generateToken = (userId) => {
 import mongoose from "mongoose";
 import restaurant from "./model/restaurant.mjs";
 import validateJWT from "./middleware/validate-jwt.mjs";
+import dishes from "./model/dishes.mjs";
 
 // Define the MongoDB URI (connection string)
 const mongoURI = "mongodb://localhost:27017/rms"; // Replace 'mydatabase' with your DB name
@@ -228,6 +229,30 @@ app.post("/add-dishes", validateJWT, async (req, res) => {
   }
 });
 
+app.put("/update-dish/:dishId", validateJWT, async (req, res) => {
+  try {
+    if (!req.params.dishId) {
+      return res.status(400).json({ message: "Dish Id is required" });
+    }
+
+    const dishFound = await dishes.findOneAndUpdate(
+      { _id: req.params.dishId, userId: req.user },
+      { $set: req.body },
+      { new: true }
+    );
+
+    if (!dishFound) {
+      return res
+        .status(404)
+        .json({ message: "No such dish found matching the credentials" });
+    }
+
+    res.status(200).json({ message: "Dish updated successfully" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 app.get("/restaurant-names", validateJWT, async (req, res) => {
   try {
     const { filter } = req.query;
@@ -255,10 +280,8 @@ app.get("/distances", validateJWT, async (req, res) => {
       latitude: 1,
       longitude: 1,
     });
-    console.log("latitude and longitude are::", latitude, longitude);
     const result = [];
     const data = await restaurant.find();
-    console.log("restaurant::", data);
     if (!data) {
       return res.status(404).json({ message: "No restaurant found" });
     }
@@ -322,7 +345,26 @@ app.get("/dishes", validateJWT, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
-
-app.listen(3000, () => {
-  console.log("Server is runing on port 3000");
+app.get("/check-dish-owner/:dishId", validateJWT, async (req, res) => {
+  try {
+    const foundDish = await dishes.find({
+      _id: req.params.dishId,
+      userId: req.user,
+    });
+    if (!foundDish.length > 0) {
+      return res.status(404).json({
+        owner: false,
+      });
+    }
+    return res.status(200).json({ owner: true });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+const server = app.listen(3000, () => {
+  console.log("Server is running on port 3000");
+});
+server.on("error", (err) => {
+  console.error("Server failed to start:", err.message);
+  process.exit(1);
 });
