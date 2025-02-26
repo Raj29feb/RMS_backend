@@ -102,6 +102,26 @@ app.get("/username", validateJWT, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+app.get(
+  "/check-restaurant-owner/:restaurantId",
+  validateJWT,
+  async (req, res) => {
+    try {
+      const foundRestaurant = await restaurant.find({
+        _id: req.params.restaurantId,
+        userId: req.user,
+      });
+      if (!foundRestaurant.length > 0) {
+        return res.status(404).json({
+          owner: false,
+        });
+      }
+      return res.status(200).json({ owner: true });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  }
+);
 app.post("/add-restaurant", validateJWT, async (req, res) => {
   try {
     //look out for the username
@@ -164,20 +184,6 @@ app.get("/restaurant/:id", validateJWT, async (req, res) => {
   }
 });
 
-app.delete("/restaurant/:id", validateJWT, async (req, res) => {
-  try {
-    if (!req.params.id) {
-      return res.status(400).json({ message: "Restaurant id is required" });
-    }
-    const data = await restaurant.findById(req.params.id);
-    if (!data) {
-      return res
-        .status(400)
-        .json({ message: "Unable to retrive the restaurants" });
-    }
-    return res.status(200).json({ data });
-  } catch (error) {}
-});
 app.get("/dish/:id", validateJWT, async (req, res) => {
   try {
     const foundDish = await dish.findById(req.params.id);
@@ -248,6 +254,50 @@ app.put("/update-dish/:dishId", validateJWT, async (req, res) => {
     }
 
     res.status(200).json({ message: "Dish updated successfully" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+app.delete("/restaurant/:restaurantId", validateJWT, async (req, res) => {
+  try {
+    if (!req.params.restaurantId) {
+      return res.status(400).json({ message: "Restaurant Id is required" });
+    }
+    const deletedRestaurant = await restaurant.findOneAndDelete({
+      _id: req.params.restaurantId,
+      userId: req.user,
+    });
+    if (!deletedRestaurant) {
+      return res
+        .status(500)
+        .json({ message: "This restaurant doesn't belongs to you." });
+    }
+    return res.status(200).json({ message: "Restaurant deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+app.put("/restaurant/:restaurantId", validateJWT, async (req, res) => {
+  try {
+    if (!req.params.restaurantId) {
+      return res.status(400).json({ message: "Restaurant Id is required" });
+    }
+
+    const restaurantUpdate = await restaurant.findOneAndUpdate(
+      { _id: req.params.restaurantId, userId: req.user },
+      { $set: req.body },
+      { new: true }
+    );
+
+    if (!restaurantUpdate) {
+      return res
+        .status(404)
+        .json({ message: "No such restaurant found matching the credentials" });
+    }
+
+    res.status(200).json({ message: "Restaurant updated successfully" });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -359,6 +409,25 @@ app.get("/check-dish-owner/:dishId", validateJWT, async (req, res) => {
     return res.status(200).json({ owner: true });
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+});
+app.delete("/dish/:dishId", validateJWT, async (req, res) => {
+  try {
+    if (!req.params.dishId) {
+      return res.status(400).json({ message: "Dish Id is requied" });
+    }
+    const deletedDish = await dishes.findOneAndDelete({
+      _id: req.params.dishId,
+      userId: req.user,
+    });
+    if (!deletedDish) {
+      return res
+        .status(500)
+        .json({ message: "This dish doesn't belongs to you." });
+    }
+    return res.status(200).json({ message: "Dish deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 });
 const server = app.listen(3000, () => {
