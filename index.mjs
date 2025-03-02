@@ -28,6 +28,7 @@ import mongoose from "mongoose";
 import restaurant from "./model/restaurant.mjs";
 import validateJWT from "./middleware/validate-jwt.mjs";
 import dishes from "./model/dishes.mjs";
+import cart from "./model/cart.mjs";
 
 // Define the MongoDB URI (connection string)
 const mongoURI = "mongodb://localhost:27017/rms"; // Replace 'mydatabase' with your DB name
@@ -42,6 +43,8 @@ mongoose
     console.error("Error connecting to MongoDB:", err.message);
   });
 
+//AUTH
+
 app.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -54,9 +57,10 @@ app.post("/login", async (req, res) => {
     // generating token
     const userId = foundUser._id;
     const token = generateToken(userId);
-    res
-      .status(200)
-      .json({ message: "User logged in successfully", data: token });
+    res.status(200).json({
+      message: "User logged in successfully",
+      token: token,
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -80,6 +84,13 @@ app.post("/register", async (req, res) => {
     req.body.latitude = latitude;
     req.body.longitude = longitude;
     const newUser = await user.create(req.body);
+    if (newUser.role === "user") {
+      const createCart = await cart.create({
+        items: [],
+        totalAmount: 0,
+        userId: newUser._id,
+      });
+    }
     if (!newUser) {
       return res.status(400).json({ message: "Unable to create the user" });
     }
@@ -88,6 +99,20 @@ app.post("/register", async (req, res) => {
       .json({ message: "User created successfully", data: newUser });
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+});
+
+//USER
+
+app.get("/user-role", validateJWT, async (req, res) => {
+  try {
+    const foundUser = await user.findById(req.user);
+    if (!foundUser) {
+      return res.status(404).json({ message: "No user found" });
+    }
+    res.status(200).json({ role: foundUser.role });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
   }
 });
 
@@ -102,6 +127,9 @@ app.get("/username", validateJWT, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+
+//RESTAURANT
+
 app.get(
   "/check-restaurant-owner/:restaurantId",
   validateJWT,
@@ -122,6 +150,26 @@ app.get(
     }
   }
 );
+
+app.get("/restaurantName/:restaurantId", validateJWT, async (req, res) => {
+  try {
+    if (!req.params.restaurantId) {
+      return res.status(400).json({ message: "Restaurant id is required" });
+    }
+    const foundRestaurant = await restaurant.findById(req.params.restaurantId, {
+      restaurantName: 1,
+    });
+    if (!foundRestaurant) {
+      return res.status(404).json({
+        message: `No restaurant found with id ${req.params.restaurantId}`,
+      });
+    }
+    res.status(200).json({ data: foundRestaurant });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 app.post("/add-restaurant", validateJWT, async (req, res) => {
   try {
     //look out for the username
@@ -146,6 +194,7 @@ app.post("/add-restaurant", validateJWT, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+
 app.get("/restaurants", validateJWT, async (req, res) => {
   try {
     const { owner } = req.query;
@@ -184,6 +233,82 @@ app.get("/restaurant/:id", validateJWT, async (req, res) => {
   }
 });
 
+app.delete("/restaurant/:restaurantId", validateJWT, async (req, res) => {
+  try {
+    if (!req.params.restaurantId) {
+      return res.status(400).json({ message: "Restaurant Id is required" });
+    }
+    const deletedRestaurant = await restaurant.findOneAndDelete({
+      _id: req.params.restaurantId,
+      userId: req.user,
+    });
+    if (!deletedRestaurant) {
+      return res
+        .status(500)
+        .json({ message: "This restaurant doesn't belongs to you." });
+    }
+    const deleteAllRelatedDishes = await dishes.deleteMany({
+      restaurantId: req.params.restaurantId,
+    });
+    return res.status(200).json({ message: "Restaurant deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+app.put("/restaurant/:restaurantId", validateJWT, async (req, res) => {
+  try {
+    if (!req.params.restaurantId) {
+      return res.status(400).json({ message: "Restaurant Id is required" });
+    }
+
+    const restaurantUpdate = await restaurant.findOneAndUpdate(
+      { _id: req.params.restaurantId, userId: req.user },
+      { $set: req.body },
+      { new: true }
+    );
+
+    if (!restaurantUpdate) {
+      return res
+        .status(404)
+        .json({ message: "No such restaurant found matching the credentials" });
+    }
+    const dishesUpdate = await dishes.updateMany(
+      { restaurantId: req.params.restaurantId },
+      { $set: { restaurantName: req.body.restaurantName } },
+      { new: true }
+    );
+
+    res.status(200).json({ message: "Restaurant updated successfully" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+app.get("/restaurant-names", validateJWT, async (req, res) => {
+  try {
+    const { filter } = req.query;
+    let data;
+    if (filter === "specific") {
+      data = await restaurant.find({ userId: req.user }, { restaurantName: 1 });
+    } else if (filter === "all") {
+      data = await restaurant.find({}, { restaurantName: 1 });
+    } else {
+      return res
+        .status(404)
+        .json({ message: "Please send filter either all or specific" });
+    }
+    if (!data) {
+      return res
+        .status(400)
+        .json({ message: "Unable to retrive the restaurants names" });
+    }
+    return res.status(200).json({ data });
+  } catch (error) {}
+});
+
+//DISH
+
 app.get("/dish/:id", validateJWT, async (req, res) => {
   try {
     const foundDish = await dish.findById(req.params.id);
@@ -195,6 +320,7 @@ app.get("/dish/:id", validateJWT, async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+
 app.post("/add-dishes", validateJWT, async (req, res) => {
   try {
     console.log("orignal body::", req.user);
@@ -259,71 +385,85 @@ app.put("/update-dish/:dishId", validateJWT, async (req, res) => {
   }
 });
 
-app.delete("/restaurant/:restaurantId", validateJWT, async (req, res) => {
+app.get("/dishes", validateJWT, async (req, res) => {
   try {
-    if (!req.params.restaurantId) {
+    const { data } = req.query;
+    let foundDishes = [];
+    if (!data) {
       return res.status(400).json({ message: "Restaurant Id is required" });
+    } else if (data === "all") {
+      foundDishes = await dish.find();
+    } else if (data === "self") {
+      foundDishes = await dish.find({ userId: req.user });
+    } else {
+      foundDishes = await dish.find({
+        restaurantId: data,
+      });
     }
-    const deletedRestaurant = await restaurant.findOneAndDelete({
-      _id: req.params.restaurantId,
+    if (!foundDishes.length > 0) {
+      return res.status(404).json({ message: "No dishes found" });
+    }
+    res.status(200).json({ data: foundDishes });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+app.get("/dishName/:dishId", validateJWT, async (req, res) => {
+  try {
+    if (!req.params.dishId) {
+      return res.status(400).json({ message: "Dish Id is required" });
+    }
+    const foundDish = await dishes.findById(req.params.dishId, { name: 1 });
+    if (!foundDish) {
+      return res
+        .status(404)
+        .json({ message: `No dish found with id ${req.params.dishId}` });
+    }
+    res.status(200).json({ data: foundDish });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+app.get("/check-dish-owner/:dishId", validateJWT, async (req, res) => {
+  try {
+    const foundDish = await dishes.find({
+      _id: req.params.dishId,
       userId: req.user,
     });
-    if (!deletedRestaurant) {
+    if (!foundDish.length > 0) {
+      return res.status(404).json({
+        owner: false,
+      });
+    }
+    return res.status(200).json({ owner: true });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+app.delete("/dish/:dishId", validateJWT, async (req, res) => {
+  try {
+    if (!req.params.dishId) {
+      return res.status(400).json({ message: "Dish Id is requied" });
+    }
+    const deletedDish = await dishes.findOneAndDelete({
+      _id: req.params.dishId,
+      userId: req.user,
+    });
+    if (!deletedDish) {
       return res
         .status(500)
-        .json({ message: "This restaurant doesn't belongs to you." });
+        .json({ message: "This dish doesn't belongs to you." });
     }
-    return res.status(200).json({ message: "Restaurant deleted successfully" });
+    return res.status(200).json({ message: "Dish deleted successfully" });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
-app.put("/restaurant/:restaurantId", validateJWT, async (req, res) => {
-  try {
-    if (!req.params.restaurantId) {
-      return res.status(400).json({ message: "Restaurant Id is required" });
-    }
-
-    const restaurantUpdate = await restaurant.findOneAndUpdate(
-      { _id: req.params.restaurantId, userId: req.user },
-      { $set: req.body },
-      { new: true }
-    );
-
-    if (!restaurantUpdate) {
-      return res
-        .status(404)
-        .json({ message: "No such restaurant found matching the credentials" });
-    }
-
-    res.status(200).json({ message: "Restaurant updated successfully" });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-});
-
-app.get("/restaurant-names", validateJWT, async (req, res) => {
-  try {
-    const { filter } = req.query;
-    let data;
-    if (filter === "specific") {
-      data = await restaurant.find({ userId: req.user }, { restaurantName: 1 });
-    } else if (filter === "all") {
-      data = await restaurant.find({}, { restaurantName: 1 });
-    } else {
-      return res
-        .status(404)
-        .json({ message: "Please send filter either all or specific" });
-    }
-    if (!data) {
-      return res
-        .status(400)
-        .json({ message: "Unable to retrive the restaurants names" });
-    }
-    return res.status(200).json({ data });
-  } catch (error) {}
-});
+//DISTANCES
 app.get("/distances", validateJWT, async (req, res) => {
   try {
     const { latitude, longitude } = await user.findById(req.user, {
@@ -372,67 +512,136 @@ app.get("/distances", validateJWT, async (req, res) => {
     return res.status(500).json({ message: error.message });
   }
 });
-app.get("/dishes", validateJWT, async (req, res) => {
+
+//CART
+app.get("/cart", validateJWT, async (req, res) => {
   try {
-    const { data } = req.query;
-    let foundDishes = [];
-    if (!data) {
-      return res.status(400).json({ message: "Restaurant Id is required" });
-    } else if (data === "all") {
-      foundDishes = await dish.find();
-    } else if (data === "self") {
-      foundDishes = await dish.find({ userId: req.user });
-    } else {
-      foundDishes = await dish.find({
-        restaurantId: data,
-      });
+    const cartData = await cart.findOne({ userId: req.user });
+    if (!cartData) {
+      return res.status(404).json({ message: "Cart not found" });
     }
-    if (!foundDishes.length > 0) {
-      return res.status(404).json({ message: "No dishes found" });
-    }
-    res.status(200).json({ data: foundDishes });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-app.get("/check-dish-owner/:dishId", validateJWT, async (req, res) => {
-  try {
-    const foundDish = await dishes.find({
-      _id: req.params.dishId,
-      userId: req.user,
-    });
-    if (!foundDish.length > 0) {
-      return res.status(404).json({
-        owner: false,
-      });
-    }
-    return res.status(200).json({ owner: true });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-app.delete("/dish/:dishId", validateJWT, async (req, res) => {
-  try {
-    if (!req.params.dishId) {
-      return res.status(400).json({ message: "Dish Id is requied" });
-    }
-    const deletedDish = await dishes.findOneAndDelete({
-      _id: req.params.dishId,
-      userId: req.user,
-    });
-    if (!deletedDish) {
-      return res
-        .status(500)
-        .json({ message: "This dish doesn't belongs to you." });
-    }
-    return res.status(200).json({ message: "Dish deleted successfully" });
+    res.status(200).json({ data: cartData });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
+
+app.post("/add-to-cart", validateJWT, async (req, res) => {
+  try {
+    const foundCart = await cart.findOne({ userId: req.user });
+    const dishFound = await dish.findById(req.body.dishId);
+    if (foundCart.items.length === 0) {
+      if (!dishFound) {
+        return res.status(404).json({ message: "No such dish found" });
+      }
+      const updatedCart = await cart.findOneAndUpdate(
+        { userId: req.user },
+        {
+          $set: {
+            items: [
+              {
+                price: dishFound.price,
+                quantity: 1,
+                restaurantId: req.body.restaurantId,
+                dishId: req.body.dishId,
+                itemTotal: dishFound.price,
+              },
+            ],
+            totalAmount: dishFound.price,
+          },
+        },
+        { new: true }
+      );
+      if (!updatedCart) {
+        res.status(404).json({ message: "Unable to update the cart" });
+      }
+      res.status(200).json({ message: "Cart updated successfully" });
+    } else if (foundCart.items.length > 0) {
+      console.log("body::", req.body);
+      console.log("found items::", foundCart);
+      let amountTotal = 0;
+      let itemFound = false;
+      foundCart.items.map((item) => {
+        if (
+          item.restaurantId === req.body.restaurantId &&
+          item.dishId === req.body.dishId
+        ) {
+          itemFound = true;
+          item.quantity = item.quantity + 1;
+          item.itemTotal = item.quantity * item.price;
+        }
+        amountTotal += item.itemTotal;
+      });
+      foundCart.totalAmount = amountTotal;
+      if (!itemFound) {
+        foundCart.items.push({
+          price: dishFound.price,
+          quantity: 1,
+          restaurantId: req.body.restaurantId,
+          dishId: req.body.dishId,
+          itemTotal: dishFound.price,
+        });
+        amountTotal += dishFound.price;
+      }
+      foundCart.totalAmount = amountTotal;
+      console.log("found cart::", foundCart);
+      const updateCart = await cart.findOneAndUpdate(
+        { userId: req.user },
+        {
+          $set: { items: foundCart.items, totalAmount: foundCart.totalAmount },
+        },
+        { new: true }
+      );
+      if (!updateCart) {
+        return res.status(404).json({ message: "Item not added in cart" });
+      }
+      res.status(200).json({ message: "Item added successfully in cart" });
+    }
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+app.patch("/cart", validateJWT, async (req, res) => {
+  try {
+    const data = await cart.updateOne(
+      { userId: req.user },
+      { items: req.body.items, totalAmount: req.body.totalAmount },
+      { new: true }
+    );
+    if (!data) {
+      return res.status(404).json({ message: "Cart not updated" });
+    }
+    res.status(200).json({ message: "Cart updated successfully" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+app.delete("/cart-item/:itemId", validateJWT, async (req, res) => {
+  try {
+    const deletedItem = await cart.updateOne(
+      { userId: req.user },
+      { $pull: { items: { _id: req.params.itemId } } }
+    );
+    if (deletedItem.modifiedCount > 0) {
+      return res.status(200).json({ message: "Item removed successfully" });
+    } else {
+      return res
+        .status(404)
+        .json({ message: "No item found with the provided itemId" });
+    }
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+//SERVER CONFIGURATION
+
 const server = app.listen(3000, () => {
   console.log("Server is running on port 3000");
 });
+
 server.on("error", (err) => {
   console.error("Server failed to start:", err.message);
   process.exit(1);

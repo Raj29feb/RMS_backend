@@ -26,10 +26,11 @@ const userSchema = new mongoose.Schema({
     required: true,
     unique: true,
   },
-  // role: {
-  //   type: String,
-  //   required: true,
-  // },
+  role: {
+    type: String,
+    enum: ["user", "admin"],
+    required: true,
+  },
 });
 
 // Create a model for the 'User' collection
