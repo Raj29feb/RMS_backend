@@ -620,9 +620,24 @@ app.patch("/cart", validateJWT, async (req, res) => {
 
 app.delete("/cart-item/:itemId", validateJWT, async (req, res) => {
   try {
+    const cartItems = await cart.findOne({
+      userId: req.user,
+    });
+    let itemPrice;
+    cartItems.items.forEach((item) => {
+      if (item._id.toString() === req.params.itemId) {
+        itemPrice = item.itemTotal;
+      }
+    });
+    console.log(cartItems.totalAmount, itemPrice);
+    const subAmount = cartItems.totalAmount - itemPrice;
     const deletedItem = await cart.updateOne(
       { userId: req.user },
-      { $pull: { items: { _id: req.params.itemId } } }
+      {
+        $pull: { items: { _id: req.params.itemId } },
+        $set: { totalAmount: subAmount },
+      },
+      { new: true }
     );
     if (deletedItem.modifiedCount > 0) {
       return res.status(200).json({ message: "Item removed successfully" });
