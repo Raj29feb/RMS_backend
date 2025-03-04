@@ -516,7 +516,9 @@ app.get("/distances", validateJWT, async (req, res) => {
 //CART
 app.get("/cart", validateJWT, async (req, res) => {
   try {
-    const cartData = await cart.findOne({ userId: req.user });
+    const cartData = await cart
+      .findOne({ userId: req.user })
+      .populate("items.dishId");
     if (!cartData) {
       return res.status(404).json({ message: "Cart not found" });
     }
@@ -530,7 +532,7 @@ app.post("/add-to-cart", validateJWT, async (req, res) => {
   try {
     const foundCart = await cart.findOne({ userId: req.user });
     const dishFound = await dish.findById(req.body.dishId);
-    if (foundCart.items.length === 0) {
+    if (foundCart && foundCart.items.length === 0) {
       if (!dishFound) {
         return res.status(404).json({ message: "No such dish found" });
       }

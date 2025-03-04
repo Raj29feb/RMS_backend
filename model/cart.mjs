@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+const Schema = mongoose.Schema;
 
 //define schema for cart item
 const cartItemSchema = new mongoose.Schema({
@@ -11,13 +12,12 @@ const cartItemSchema = new mongoose.Schema({
     required: true,
   },
   restaurantId: {
-    type: String,
+    type: Schema.Types.ObjectId,
+    ref: "restaurant",
     required: true,
   },
-  dishId: {
-    type: String,
-    required: true,
-  },
+  dishId: { type: Schema.Types.ObjectId, ref: "Dish", required: true },
+
   itemTotal: {
     type: Number,
     required: true,
