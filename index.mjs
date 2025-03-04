@@ -205,7 +205,7 @@ app.get("/restaurants", validateJWT, async (req, res) => {
       data = await restaurant.find();
     } else if (owner === "self") {
       data = await restaurant.find({ userId: req.user });
-      console.log("data::", data);
+      // console.log("data::", data);
     } else {
       data = await restaurant.find({ owner });
     }
@@ -323,7 +323,7 @@ app.get("/dish/:id", validateJWT, async (req, res) => {
 
 app.post("/add-dishes", validateJWT, async (req, res) => {
   try {
-    console.log("orignal body::", req.user);
+    // console.log("orignal body::", req.user);
     const foundUser = await user.findById(req.user, { username: 1, _id: 0 });
     if (!foundUser) {
       return res.status(400).json({ message: "Unable to get the user" });
@@ -344,7 +344,7 @@ app.post("/add-dishes", validateJWT, async (req, res) => {
     }
     req.body.map((restaurant) => (restaurant.userId = req.user));
 
-    console.log("altered body::", req.body);
+    // console.log("altered body::", req.body);
 
     // 5. Insert the new dishes into the 'Dish' collection
     const newDishes = await dish.insertMany(req.body); // Multiple dishes inserted
@@ -559,14 +559,14 @@ app.post("/add-to-cart", validateJWT, async (req, res) => {
       }
       res.status(200).json({ message: "Cart updated successfully" });
     } else if (foundCart.items.length > 0) {
-      console.log("body::", req.body);
-      console.log("found items::", foundCart);
+      // console.log("body::", req.body);
+      // console.log("found items::", foundCart);
       let amountTotal = 0;
       let itemFound = false;
       foundCart.items.map((item) => {
         if (
           item.restaurantId === req.body.restaurantId &&
-          item.dishId === req.body.dishId
+          item.dishId._id.toString() === req.body.dishId
         ) {
           itemFound = true;
           item.quantity = item.quantity + 1;
@@ -586,7 +586,7 @@ app.post("/add-to-cart", validateJWT, async (req, res) => {
         amountTotal += dishFound.price;
       }
       foundCart.totalAmount = amountTotal;
-      console.log("found cart::", foundCart);
+      // console.log("found cart::", foundCart);
       const updateCart = await cart.findOneAndUpdate(
         { userId: req.user },
         {
@@ -631,7 +631,7 @@ app.delete("/cart-item/:itemId", validateJWT, async (req, res) => {
         itemPrice = item.itemTotal;
       }
     });
-    console.log(cartItems.totalAmount, itemPrice);
+    // console.log(cartItems.totalAmount, itemPrice);
     const subAmount = cartItems.totalAmount - itemPrice;
     const deletedItem = await cart.updateOne(
       { userId: req.user },
